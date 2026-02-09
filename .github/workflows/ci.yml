@@ -1,0 +1,43 @@
+name: uBO build & artifacts
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get latest tag as version
+        id: get_version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          echo "VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Clone uAssets
+        run: |
+          tools/pull-assets.sh
+
+      - name: Build MV2 packages
+        run: |
+          tools/make-chromium.sh ${{ env.VERSION }}
+          tools/make-firefox.sh ${{ env.VERSION }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uBlock0-builds-${{ env.VERSION }}
+          path: |
+            dist/build/uBlock0_${{ env.VERSION }}.chromium.zip
+            dist/build/uBlock0_${{ env.VERSION }}.firefox.xpi
