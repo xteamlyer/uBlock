@@ -336,8 +336,8 @@ restrFromGenericPattern.rePlainChars = /[.+?${}()|[\]\\]/g;
 restrFromGenericPattern.reSeparators = /\^/g;
 restrFromGenericPattern.reDanglingAsterisks = /^\*+|\*+$/g;
 restrFromGenericPattern.reAsterisks = /\*+/g;
-restrFromGenericPattern.restrHostnameAnchor1 = '^[a-z-]+://(?:[^/?#]+\\.)?';
-restrFromGenericPattern.restrHostnameAnchor2 = '^[a-z-]+://(?:[^/?#]+)?';
+restrFromGenericPattern.restrHostnameAnchor1 = '^[^:]+://(?:[^/]+\\.)?';
+restrFromGenericPattern.restrHostnameAnchor2 = '^[^:]+://(?:[^/]+)?';
 
 /******************************************************************************/
 
@@ -4591,6 +4591,7 @@ StaticNetFilteringEngine.prototype.dnrFromCompiled = function(op, context, ...ar
         'websocket',
         'ping',
         'other',
+        'popup',
     ]);
     const ruleset = [];
     const seen = new Set();
