@@ -42,4 +42,10 @@ jobs:
       - name: Build MV2 packages
         run: |
           tools/make-chromium.sh ${{ env.VERSION }}
-          tools/make-firefox.s
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uBlock0-builds-${{ env.VERSION }}
+          path: |
+            dist/build/uBlock0_${{ env.VERSION }}.chromium.zip
