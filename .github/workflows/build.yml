@@ -1,0 +1,45 @@
+name: uBO build & artifacts
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get latest release tag from gorhill/uBlock
+        id: get_version
+        run: |
+          LATEST_TAG=$(curl -sf "https://api.github.com/repos/gorhill/uBlock/releases/latest" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            | jq -r '.tag_name')
+
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "ERROR: Failed to fetch latest release tag" >&2
+            exit 1
+          fi
+
+          echo "VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Fetched version: $LATEST_TAG"
+
+      - name: Clone uAssets
+        run: |
+          tools/pull-assets.sh
+
+      - name: Build MV2 packages
+        run: |
+          tools/make-chromium.sh ${{ env.VERSION }}
+          tools/make-firefox.s
