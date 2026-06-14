@@ -141,6 +141,7 @@ export class JSONPath {
         if ( i === 0 ) { this.#root = null; return; }
         while ( i-- ) {
             const { obj, key } = this.#resolvePath(paths[i]);
+            if ( obj === undefined ) { continue; }
             if ( rval !== undefined ) {
                 this.#modifyVal(obj, key);
             } else if ( Array.isArray(obj) && typeof key === 'number' ) {
@@ -167,10 +168,12 @@ export class JSONPath {
     #CURRENT = 2;
     #CHILDREN = 3;
     #DESCENDANTS = 4;
+    #QUANTIFIER = 5;
     #reUnquotedIdentifier = /^[A-Za-z_][\w]*|^\*/;
     #reExpr = /^\s*([!=^$*]=|[<>]=?)\s*(.+?)\]/;
     #reIndice = /^-?\d+/;
     #reRval = /^=([a-z]+)\((.+)\)$/;
+    #reQuantifier = /^\{(\d+|\d+,\d+|\d+,|,\d+)\};\$/;
     #root;
     #compiled;
     #compile(query, i) {
@@ -206,9 +209,32 @@ export class JSONPath {
                 }
                 continue;
             }
-            if ( c === 0x24 /* $ */ ) {
-                steps.push({ mv: this.#ROOT });
-                i += 1;
+            if ( c === 0x3B /* ; */ ) {
+                if ( query.startsWith(';$', i) === false ) { return; }
+                steps.push(
+                    { mv: this.#QUANTIFIER, min: 1, max: 1e6 },
+                    { mv: this.#ROOT }
+                );
+                i += 2;
+                mv = this.#UNDEFINED;
+                continue;
+            }
+            if ( c === 0x7B /* { */ ) {
+                const match = this.#reQuantifier.exec(query.slice(i));
+                if ( match === null ) { return; }
+                const comma = match[1].indexOf(',');
+                let min, max;
+                if ( comma === -1 ) {
+                    min = max = parseInt(match[1]);
+                } else {
+                    min = parseInt(match[1].slice(0, comma)) || 0;
+                    max = parseInt(match[1].slice(comma+1)) || 1e6;
+                }
+                steps.push(
+                    { mv: this.#QUANTIFIER, min, max },
+                    { mv: this.#ROOT }
+                );
+                i += match[0].length;
                 mv = this.#UNDEFINED;
                 continue;
             }
@@ -261,16 +287,15 @@ export class JSONPath {
     #evaluate(steps, pathin) {
         let resultset = [];
         if ( Array.isArray(steps) === false ) { return resultset; }
-        for ( let i = 0; i < steps.length; i++ ) {
-            const step = steps[i];
+        for ( const step of steps ) {
             switch ( step.mv ) {
             case this.#ROOT:
-                if ( resultset.length === 0 && i !== 0 ) { break; }
                 resultset = [ [ '$' ] ];
                 break;
             case this.#CURRENT:
                 if ( step.op ) {
                     const { obj, key } = this.#resolvePath(pathin);
+                    if ( obj === undefined ) { return []; }
                     const outcome = this.#evaluateExpr(step, obj, key);
                     if ( outcome !== true ) { break; }
                 }
@@ -280,6 +305,12 @@ export class JSONPath {
             case this.#DESCENDANTS: {
                 if ( resultset.length === 0 ) { break; }
                 resultset = this.#getMatches(resultset, step);
+                break;
+            }
+            case this.#QUANTIFIER: {
+                const { length } = resultset;
+                if ( length < step.min || length > step.max ) { return []; }
+                resultset = [];
                 break;
             }
             default:
@@ -292,6 +323,7 @@ export class JSONPath {
         const listout = [];
         for ( const pathin of listin ) {
             const { value: owner } = this.#resolvePath(pathin);
+            if ( owner === undefined ) { continue; }
             if ( step.steps ) {
                 this.#getMatchesFromExpr(pathin, step, owner, listout);
                 continue;
@@ -348,7 +380,7 @@ export class JSONPath {
     }
     #getMatchesFromExpr(pathin, step, owner, out) {
         const recursive = step.mv === this.#DESCENDANTS;
-        const v2 = this.#compiled.v2 || Array.isArray(owner);
+        const v2 = this.#compiled.v2 || recursive || Array.isArray(owner);
         for ( const { path } of this.#getDescendants(owner, recursive) ) {
             const q = v2 ? [ ...pathin, ...path ] : pathin;
             const r = this.#evaluate(step.steps, q);
@@ -503,6 +535,7 @@ export class JSONPath {
         let obj = this.#root
         for ( let i = 0, n = path.length-1; i < n; i++ ) {
             obj = obj[path[i]];
+            if ( obj instanceof Object === false ) { return {}; }
         }
         return { obj, key, value: obj[key] };
     }
